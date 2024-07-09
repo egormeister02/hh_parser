@@ -4,11 +4,11 @@ from tkinter import filedialog
 from tkinter import simpledialog
 import threading
 import requests
-import pytz
 import time
 import pandas as pd
-from datetime import datetime, timedelta
 import os
+
+import periods as pr
 
 URL = 'https://api.hh.ru/vacancies'
 
@@ -24,11 +24,12 @@ def split_interval(date_from, date_to):
     half_duration = (date_to - date_from) / 2
     middle_date = date_from + half_duration
     return (date_from, middle_date), (middle_date, date_to)
+
 def getVacans(url, params):
     vacancies = []
     page = 0
     while True:
-        time.sleep(0.04)  # Задержка между запросами
+        time.sleep(0.05)  # Задержка между запросами
         params['page'] = page
         response = requests.get(url, params=params)
 
@@ -52,94 +53,14 @@ def getVacans(url, params):
         if (page + 1) >= data['pages']:
             break
         page += 1
-    time.sleep(1.2)
+    time.sleep(1.5)
     return vacancies
 
 def fetch_vacancies(job_title):
     
-
-    time_zone = pytz.timezone('Europe/Moscow')  # Пример часового пояса
-    times_fullday = []
-    day_shift = 1
-
-    for day in range(3):
-        date_to = datetime.now(time_zone) - timedelta(days=day)
-        date_from = date_to - timedelta(days=day_shift)
-        # Разбиваем каждый интервал сразу пополам
-        first_half, second_half = split_interval(date_from, date_to)
-        # Добавляем оба интервала в массив times_fullday
-        times_fullday.extend([first_half, second_half])
-
-    # Форматирование временных интервалов в строковом представлении сразу после создания
-    formatted_times_fullday = []
-    for interval in times_fullday:
-        date_from_str = interval[0].strftime("%Y-%m-%dT%H:%M:%S%z")
-        date_to_str = interval[1].strftime("%Y-%m-%dT%H:%M:%S%z")
-        formatted_times_fullday.append((date_from_str, date_to_str))
-
-    # Итоговый массив временных интервалов
-    times_fullday = formatted_times_fullday
-
-        # Предыдущая точка отсчета (например, дата за 3 дня до `datetime.now()`)
-    previous_date_to = datetime.now(time_zone) - timedelta(days=3)
-
-    # Добавляем новые промежутки
-    # Два промежутка по одному дню каждый
-    for i in range(2):
-        date_to = previous_date_to
-        date_from = date_to - timedelta(days=1)
-        times_fullday.append((date_from.strftime("%Y-%m-%dT%H:%M:%S%z"), date_to.strftime("%Y-%m-%dT%H:%M:%S%z")))
-        previous_date_to = date_from
-
-    # Два промежутка по два дня каждый
-    for i in range(2):
-        date_to = previous_date_to
-        date_from = date_to - timedelta(days=2)
-        times_fullday.append((date_from.strftime("%Y-%m-%dT%H:%M:%S%z"), date_to.strftime("%Y-%m-%dT%H:%M:%S%z")))
-        previous_date_to = date_from
-
-    # Один промежуток равный неделе
-    date_to = previous_date_to
-    date_from = date_to - timedelta(weeks=1)
-    times_fullday.append((date_from.strftime("%Y-%m-%dT%H:%M:%S%z"), date_to.strftime("%Y-%m-%dT%H:%M:%S%z")))
-    previous_date_to = date_from
-
-    # Один промежуток равный месяцу
-    date_to = previous_date_to
-    date_from = date_to - timedelta(days=30)  # Аппроксимация месяца
-    times_fullday.append((date_from.strftime("%Y-%m-%dT%H:%M:%S%z"), date_to.strftime("%Y-%m-%dT%H:%M:%S%z")))
-
-    # Итоговый массив временных интервалов обновлен
-
-    times_fullday = sorted(times_fullday, key=lambda x: x[0])
-
-    times_remote = []
-
-    for i in range(0, len(times_fullday) - 1, 2):
-        # Объединяем каждую пару интервалов
-        start = times_fullday[i][0]  # Начало текущего интервала
-        end = times_fullday[i + 1][1]  # Конец следующего интервала в паре
-        times_remote.append((start, end))
-
-    # Выводим на экран отсортированный и обработанный список интервалов
-    # Предполагаем, что times_sorted уже отсортирован
-    end_of_last_interval = datetime.strptime(times_fullday[-1][1], "%Y-%m-%dT%H:%M:%S%z")
-
-    # Создаем недельный интервал
-    week_interval_end = end_of_last_interval
-    week_interval_start = week_interval_end - timedelta(weeks=1)
-
-    # Создаем месячный интервал следующим за недельным
-    month_interval_end = week_interval_start
-    month_interval_start = month_interval_end - timedelta(days=30)  # Примерное представление месяца
-
-    # Формируем новые интервалы в правильном формате строки
-    week_interval = (week_interval_start.strftime("%Y-%m-%dT%H:%M:%S%z"), week_interval_end.strftime("%Y-%m-%dT%H:%M:%S%z"))
-    month_interval = (month_interval_start.strftime("%Y-%m-%dT%H:%M:%S%z"), month_interval_end.strftime("%Y-%m-%dT%H:%M:%S%z"))
-
-    # Создаем массив times_3
-    times_else = [week_interval, month_interval]
-
+    times_fullday = pr.getFulldayPeriods()
+    times_remote = pr.getRemorePeriods(times_fullday)
+    times_else = pr.getElsePeriods()
 
     all_vacancies = []
 
@@ -237,8 +158,6 @@ def search_vacancies():
     
     threading.Thread(target=async_fetch_save).start()
 
-...
-
 root = tk.Tk()
 root.title("Поиск вакансий на hh.ru")
 center_window(root, 480, 320)
@@ -246,5 +165,5 @@ root.protocol("WM_DELETE_WINDOW", on_closing)
 search_button = tk.Button(root, text="Искать вакансии", command=search_vacancies)
 search_button.pack(pady=20)
 
-# Убрали вызов лишних элементов
+
 root.mainloop()
